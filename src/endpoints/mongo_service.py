@@ -1,5 +1,5 @@
-from endpoints.NotFoundException import NotFoundException
-from model.User import User
+from src.exceptions.NotFoundException import NotFoundException
+from src.model.User import User
 import motor.motor_asyncio
 
 mongo_password = "Key123"
@@ -22,6 +22,6 @@ async def get_user_by_name(name):
         return user
 
 
-async def add_new_user(name, password):
-    user_dict = {"name": name, "password": password}
+async def add_new_user(name, pass_hash):
+    user_dict = {"name": name, "pass_hash": pass_hash}
     await get_database()["Users"].insert_one(user_dict)
