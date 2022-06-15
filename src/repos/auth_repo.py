@@ -4,9 +4,8 @@ import src.endpoints.mongo_service as db_service
 import hashlib
 import os
 import aiofiles
-import asyncio
-
-from src.exceptions import NotFoundException, UnauthorizedException
+from src.exceptions.NotFoundException import NotFoundException
+from src.exceptions.UnauthorizedException import UnauthorizedException
 from src.utils import get_project_root
 
 data_source = db_service
@@ -44,7 +43,6 @@ def encode_pass(password):
 def verify_pass(password_to_check, hash_from_storage):
     salt_from_storage = hash_from_storage[:32]
     key_from_storage = hash_from_storage[32:]
-
     new_key = hashlib.pbkdf2_hmac(
         'sha256',
         password_to_check.encode('utf-8'),
@@ -58,9 +56,9 @@ async def get_token_for_name(name):
     page_path = os.path.join(get_project_root(), 'res/rsa_keys/private.key')
     async with aiofiles.open(page_path, 'rb') as file:
         private_key = await file.read()
-        expire_time = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(seconds=10)
+        expire_time = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(seconds=30)
         token = jwt.encode({"user": name, "exp": expire_time}, private_key, algorithm="RS256")
-        return token
+        return token, expire_time
 
 
 async def verify_token(token):
@@ -71,6 +69,6 @@ async def verify_token(token):
             decoded = jwt.decode(token, private_key, algorithms=["RS256"])
             return decoded["user"]
         except jwt.ExpiredSignatureError:
-            return None
+            raise UnauthorizedException
         except jwt.InvalidTokenError:
-            return None
+            raise UnauthorizedException
