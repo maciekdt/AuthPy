@@ -6,7 +6,8 @@ import os
 import aiofiles
 from src.exceptions.NotFoundException import NotFoundException
 from src.exceptions.UnauthorizedException import UnauthorizedException
-from src.utils import get_project_root
+from src.model.User import User
+from src.utils import get_project_root, get_random_object_id
 
 data_source = db_service
 
@@ -25,7 +26,15 @@ async def login(name, password):
 
 async def register(name, password):
     pass_hash = encode_pass(password)
-    await data_source.add_new_user(name, pass_hash)
+    user_id = get_random_object_id()
+    main_folder_id = get_random_object_id()
+    shared_folder_id = get_random_object_id()
+
+    user = User(user_id, name, pass_hash, main_folder_id, shared_folder_id)
+    await data_source.add_new_user(user)
+
+    await data_source.add_new_folder("My files", main_folder_id, user_id)
+    await data_source.add_new_folder("Shared files", shared_folder_id, user_id)
 
 
 def encode_pass(password):

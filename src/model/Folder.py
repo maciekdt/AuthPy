@@ -3,9 +3,9 @@ from bson import ObjectId
 
 
 @dataclass
-class User:
+class Folder:
     _id: ObjectId
     name: str
-    pass_hash: bytes
-    main_folder: ObjectId
-    shared_folder: ObjectId
+    folders: []
+    files: []
+    owners: []
