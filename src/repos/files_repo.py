@@ -13,9 +13,10 @@ async def add_new_file(file_name, file_bytes, folder_id):
     await db_service.add_file_to_folder(file_name, file_id, folder_id)
 
 
-def get_file(file_id_name):
-    file_path = os.path.join(get_project_root(), "res/files/"+file_id_name)
-    file = open(file_path, "rb")
-    result = file.read()
-    file.close()
-    return result
+async def get_file(file_id, folder_id):
+    file_path = os.path.join(get_project_root(), "res/files/" + str(file_id) + ".txt")
+    folder = await db_service.get_folder(folder_id)
+    for file in folder.files:
+        if file["_id"] == file_id:
+            return file_path, file["name"]
+

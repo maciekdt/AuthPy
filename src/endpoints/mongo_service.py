@@ -22,6 +22,16 @@ async def get_user_by_name(name):
         return user
 
 
+async def get_user_by_id(id):
+    query = {"_id": id}
+    user_dict = await get_database()["Users"].find_one(query)
+    if user_dict is None:
+        raise NotFoundException
+    else:
+        user = User(**user_dict)
+        return user
+
+
 async def add_new_user(user):
     user_dict = dict(_id=user._id,
                      name=user.name,
@@ -46,12 +56,12 @@ async def add_file_to_folder(file_name, file_id, parent_folder_id):
     await get_database()["Folders"].update_one(query, options)
 
 
-async def add_new_folder(folder_name, folder_id, owner_id):
+async def add_new_folder(folder_name, folder_id, owners):
     folder = {"_id": folder_id,
               "name": folder_name,
               "folders": [],
               "files": [],
-              "owners": [owner_id]}
+              "owners": owners}
     await get_database()["Folders"].insert_one(folder)
 
 

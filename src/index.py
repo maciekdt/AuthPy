@@ -1,6 +1,6 @@
 from bson import ObjectId
 from sanic import Sanic, response
-from sanic.response import json, empty, html, text, file
+from sanic.response import json, empty, html, text, file, redirect
 import src.repos.auth_repo as auth
 from src.exceptions.UnauthorizedException import UnauthorizedException
 from src.exceptions.NotFoundException import NotFoundException
@@ -12,51 +12,48 @@ from src.utils import get_random_object_id
 app = Sanic("AuthPy")
 
 
-@app.post("/auth/login")
-async def login(request):
-    name = request.form['name'][0]
-    password = request.form["pass"][0]
-    token, expire_time = await auth.login(name, password)
-    return_response = text("Logged in", status=200)
-    return_response.cookies["token"] = token
-    return return_response
+@app.middleware("request")
+async def extract_user(request):
+    if "/auth/" not in request.url:
+        token = request.cookies.get("token")
+        request.ctx.user_id = ObjectId(await auth.verify_token(token))
 
 
-@app.get("/auth/check")
-async def check(request):
-    token = request.cookies.get("token")
-    user = await auth.verify_token(token)
-    return json({"user": user}, status=200)
+@app.get("/file/<folder_id>/<file_id>")
+async def get_file(request, folder_id, file_id):
+    folder = await mongo_service.get_folder(ObjectId(folder_id))
+    if auth.check_owner(request, folder):
+        file_path, file_name = await files_repo.get_file(ObjectId(file_id), ObjectId(folder_id))
+        return await file(file_path, filename=file_name)
 
 
-@app.post("/auth/register")
-async def register(request):
-    name = request.form['name'][0]
-    password = request.form["pass"][0]
-    await auth.register(name, password)
-    return text("User registered", status=200)
+@app.post("/file/<folder_id>")
+async def upload_file(request, folder_id):
+    folder = await mongo_service.get_folder(ObjectId(folder_id))
+    if auth.check_owner(request, folder):
+        file_bytes = request.files.get("uploaded_file").body
+        file_name = request.files.get("uploaded_file").name
+        await files_repo.add_new_file(file_name, file_bytes, ObjectId(folder_id))
+        return redirect("/folder/"+folder_id)
 
 
-@app.post("/file")
-async def register(request):
-    file_bytes = request.files.get("uploaded_file").body
-    file_name = request.files.get("uploaded_file").name
-    await files_repo.add_new_file(file_name, file_bytes, ObjectId("b8618258485a3f412d1732a9"))
-    return text("XDD")
+@app.get("folder/<folder_id>")
+async def get_folder_page(request, folder_id):
+    folder = await mongo_service.get_folder(ObjectId(folder_id))
+    if auth.check_owner(request, folder):
+        page = await html_repo.get_folders_page(folder)
+        return html(page)
 
 
-@app.get("/")
-async def test(request):
-    f = await mongo_service.get_folder(ObjectId("c4d99b313444aebf743130df"))
-    return text("XDD")
-
-
-
-
-
-
-
-
+@app.post("folder/<folder_id>")
+async def upload_folder(request, folder_id):
+    folder_parent = await mongo_service.get_folder(ObjectId(folder_id))
+    if auth.check_owner(request, folder_parent):
+        folder_name = request.form['folder_name'][0]
+        folder_id = get_random_object_id()
+        await mongo_service.add_new_folder(folder_name, folder_id, folder_parent.owners)
+        await mongo_service.add_folder_to_folder(folder_name, folder_id, folder_parent._id)
+        return redirect("/folder/"+str(folder_parent._id))
 
 
 @app.get("/page/auth/login")
@@ -65,22 +62,49 @@ async def get_login_page(request):
     return html(page, status=200)
 
 
+@app.post("/page/auth/login")
+async def login(request):
+    name = request.form['name'][0]
+    password = request.form["pass"][0]
+    token, user = await auth.login(name, password)
+    return_response = redirect('/page/main')
+    return_response.cookies["token"] = token
+    return return_response
+
+
 @app.get("/page/auth/register")
 async def get_register_page(request):
     page = await html_repo.get_page('res/pages/register_page.html')
     return html(page, status=200)
 
 
-@app.get("/page/upload")
-async def get_register_page(request):
-    page = await html_repo.get_page('res/pages/upload_page.html')
+@app.post("/page/auth/register")
+async def register(request):
+    name = request.form['name'][0]
+    password = request.form["pass"][0]
+    await auth.register(name, password)
+    token, user = await auth.login(name, password)
+    return_response = redirect('/page/main')
+    return_response.cookies["token"] = token
+    return return_response
+
+
+@app.get("page/main")
+async def page_main(request):
+    user = await mongo_service.get_user_by_id(ObjectId(request.ctx.user_id))
+    page = await html_repo.get_main_page(user.main_folder, user.shared_folder)
+    return html(page, status=200)
+
+
+@app.get("page/auth/unauthorized")
+async def page_main(request):
+    page = await html_repo.get_page('res/pages/unauthorized_page.html')
     return html(page, status=200)
 
 
 @app.exception(UnauthorizedException)
 async def raise_401s(request, exception):
-    page = await html_repo.get_page('res/pages/login_page.html')
-    return html(page, status=401)
+    return redirect("/page/auth/unauthorized")
 
 
 @app.exception(NotFoundException)
