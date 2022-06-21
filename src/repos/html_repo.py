@@ -30,6 +30,10 @@ async def get_folders_page(folder):
         page = await f.read()
         page.replace('\n', '')
         template = Template(page)
+        if folder.folders:
+            folder.folders.sort(key=lambda x: x["name"])
+        if folder.files:
+            folder.files.sort(key=lambda x: x["name"])
         return template.render(folder_path="/folder/",
                                file_path="/file/",
                                current_folder_id=str(folder._id),

@@ -1,5 +1,7 @@
 import datetime
 import jwt
+from bson import ObjectId
+
 import src.endpoints.mongo_service as db_service
 import hashlib
 import os
@@ -10,6 +12,8 @@ from src.model.User import User
 from src.utils import get_project_root, get_random_object_id
 
 data_source = db_service
+HASH_ITERATIONS = 100000
+SALT_LEN = 32
 
 
 async def login(name, password):
@@ -38,25 +42,25 @@ async def register(name, password):
 
 
 def encode_pass(password):
-    salt = os.urandom(32)
+    salt = os.urandom(SALT_LEN)
     key = hashlib.pbkdf2_hmac(
         'sha256',
         password.encode('utf-8'),
         salt,
-        100000
+        HASH_ITERATIONS
     )
     storage = salt + key
     return storage
 
 
 def verify_pass(password_to_check, hash_from_storage):
-    salt_from_storage = hash_from_storage[:32]
-    key_from_storage = hash_from_storage[32:]
+    salt_from_storage = hash_from_storage[:SALT_LEN]
+    key_from_storage = hash_from_storage[SALT_LEN:]
     new_key = hashlib.pbkdf2_hmac(
         'sha256',
         password_to_check.encode('utf-8'),
         salt_from_storage,
-        100000
+        HASH_ITERATIONS
     )
     return new_key == key_from_storage
 
@@ -65,7 +69,7 @@ async def get_token_for_user(name, user_id):
     page_path = os.path.join(get_project_root(), 'res/rsa_keys/private.key')
     async with aiofiles.open(page_path, 'rb') as file:
         private_key = await file.read()
-        expire_time = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(seconds=1000)
+        expire_time = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(seconds=3600)
         token = jwt.encode({"user": name, "user_id": str(user_id),  "exp": expire_time}, private_key, algorithm="RS256")
         return token
 
@@ -83,7 +87,8 @@ async def verify_token(token):
             raise UnauthorizedException
 
 
-def check_owner(request, folder):
+async def check_owner(request, folder_id):
+    folder = await data_source.get_folder(ObjectId(folder_id))
     if request.ctx.user_id in folder.owners:
         return True
     else:

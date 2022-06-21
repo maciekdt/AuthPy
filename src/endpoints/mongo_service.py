@@ -70,3 +70,25 @@ async def get_folder(folder_id):
     folder_dict = await get_database()["Folders"].find_one(query)
     folder = Folder(**folder_dict)
     return folder
+
+
+async def delete_file(file_id, folder_id):
+    query = {"_id": folder_id}
+    options = {'$pull': {'files': {'_id': file_id}}}
+    await get_database()["Folders"].update_one(query, options)
+
+
+async def delete_folder(folder_id, folder_parent_id):
+    query = {"_id": folder_parent_id}
+    options = {'$pull': {'folders': {'_id': folder_id}}}
+    await get_database()["Folders"].update_one(query, options)
+
+
+async def set_owner_to_folder(folder_id, user_id):
+    query = {'_id': folder_id}
+    options = {'$push': {'owners': user_id}}
+    await get_database()["Folders"].update_one(query, options)
+    folder = await get_folder(folder_id)
+    for sub_folder in folder.folders:
+        await set_owner_to_folder(sub_folder["_id"], user_id)
+

@@ -21,39 +21,62 @@ async def extract_user(request):
 
 @app.get("/file/<folder_id>/<file_id>")
 async def get_file(request, folder_id, file_id):
-    folder = await mongo_service.get_folder(ObjectId(folder_id))
-    if auth.check_owner(request, folder):
+    if await auth.check_owner(request, folder_id):
         file_path, file_name = await files_repo.get_file(ObjectId(file_id), ObjectId(folder_id))
         return await file(file_path, filename=file_name)
 
 
 @app.post("/file/<folder_id>")
 async def upload_file(request, folder_id):
-    folder = await mongo_service.get_folder(ObjectId(folder_id))
-    if auth.check_owner(request, folder):
+    if await auth.check_owner(request, folder_id):
         file_bytes = request.files.get("uploaded_file").body
         file_name = request.files.get("uploaded_file").name
         await files_repo.add_new_file(file_name, file_bytes, ObjectId(folder_id))
         return redirect("/folder/"+folder_id)
 
 
+@app.post("/file/<folder_id>/delete/<file_id>")
+async def delete_file(request, folder_id, file_id):
+    if await auth.check_owner(request, folder_id):
+        await mongo_service.delete_file(ObjectId(file_id), ObjectId(folder_id))
+        return redirect("/folder/"+folder_id)
+
+
 @app.get("folder/<folder_id>")
 async def get_folder_page(request, folder_id):
-    folder = await mongo_service.get_folder(ObjectId(folder_id))
-    if auth.check_owner(request, folder):
+    if await auth.check_owner(request, folder_id):
+        folder = await mongo_service.get_folder(ObjectId(folder_id))
         page = await html_repo.get_folders_page(folder)
         return html(page)
 
 
-@app.post("folder/<folder_id>")
-async def upload_folder(request, folder_id):
-    folder_parent = await mongo_service.get_folder(ObjectId(folder_id))
-    if auth.check_owner(request, folder_parent):
+@app.post("folder/<folder_parent_id>")
+async def upload_folder(request, folder_parent_id):
+    if await auth.check_owner(request, folder_parent_id):
+        folder_parent = await mongo_service.get_folder(ObjectId(folder_parent_id))
         folder_name = request.form['folder_name'][0]
         folder_id = get_random_object_id()
         await mongo_service.add_new_folder(folder_name, folder_id, folder_parent.owners)
         await mongo_service.add_folder_to_folder(folder_name, folder_id, folder_parent._id)
-        return redirect("/folder/"+str(folder_parent._id))
+        return redirect("/folder/"+folder_parent_id)
+
+
+@app.post("/folder/<folder_parent_id>/delete/<folder_id>")
+async def delete_file(request, folder_parent_id, folder_id):
+    if await auth.check_owner(request, folder_parent_id):
+        await mongo_service.delete_folder(ObjectId(folder_id), ObjectId(folder_parent_id))
+        return redirect("/folder/"+folder_parent_id)
+
+
+@app.post("/folder/share/<folder_id>")
+async def share_folder(request, folder_id):
+    if await auth.check_owner(request, folder_id):
+        folder = await mongo_service.get_folder(ObjectId(folder_id))
+        user_name = request.form['name'][0]
+        user = await mongo_service.get_user_by_name(user_name)
+        await mongo_service.add_folder_to_folder(folder.name, folder._id, user.shared_folder)
+        await mongo_service.set_owner_to_folder(ObjectId(folder_id), user._id)
+        return redirect("/folder/" + folder_id)
 
 
 @app.get("/page/auth/login")
@@ -102,6 +125,12 @@ async def page_main(request):
     return html(page, status=200)
 
 
+@app.get("page/auth/notfound")
+async def page_main(request):
+    page = await html_repo.get_page('res/pages/notfound_page.html')
+    return html(page, status=200)
+
+
 @app.exception(UnauthorizedException)
 async def raise_401s(request, exception):
     return redirect("/page/auth/unauthorized")
@@ -109,12 +138,12 @@ async def raise_401s(request, exception):
 
 @app.exception(NotFoundException)
 async def raise_404s(request, exception):
-    return text("Not found, try again", status=404)
+    return redirect("/page/auth/notfound")
 
 
-# @app.exception(Exception)
-# async def raise_500s(request, exception):
-# return text("Server error", status=500)
+@app.exception(Exception)
+async def raise_500s(request, exception):
+    return text("Server error", status=500)
 
 
 if __name__ == "__main__":
